@@ -1,4 +1,5 @@
 # AutoEQ Catalog generation & keys gitignore
+keys/
 *.pem
 *.key
 *.der

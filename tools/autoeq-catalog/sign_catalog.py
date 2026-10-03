@@ -135,25 +135,36 @@ def main():
         valid = verify_manifest(args.manifest, args.signature, pub_path)
         sys.exit(0 if valid else 1)
 
-    if args.generate_keys or not os.path.exists(args.private_key):
-        if not os.path.exists(args.private_key):
+    if not os.path.exists(args.private_key):
+        if args.generate_keys:
             key_dir = os.path.dirname(args.private_key) or "."
             pub_pem = args.public_key_pem or os.path.join(key_dir, "public_key.pem")
             pub_der = args.public_key_der or os.path.join(key_dir, "public_key.der")
             generate_keypair(args.private_key, pub_pem, pub_der)
-        elif args.generate_keys:
-            print(f"Private key '{args.private_key}' already exists, skipping generation.")
+        else:
+            print(f"Error: Private key '{args.private_key}' not found. Use --generate-keys to generate a new keypair.", file=sys.stderr)
+            sys.exit(1)
+    elif args.generate_keys:
+        print(f"Private key '{args.private_key}' already exists, skipping generation.")
 
     sign_manifest(args.manifest, args.private_key, args.signature)
 
-    if args.public_key_der:
+    if args.public_key_der or args.public_key_pem:
         with open(args.private_key, "rb") as f:
             priv = load_pem_private_key(f.read(), password=None)
-        pub_der = priv.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
-        os.makedirs(os.path.dirname(os.path.abspath(args.public_key_der)), exist_ok=True)
-        with open(args.public_key_der, "wb") as f:
-            f.write(pub_der)
-        print(f"Exported public key SPKI DER: {args.public_key_der}")
+        pub_key = priv.public_key()
+        if args.public_key_pem:
+            pub_pem = pub_key.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+            os.makedirs(os.path.dirname(os.path.abspath(args.public_key_pem)), exist_ok=True)
+            with open(args.public_key_pem, "wb") as f:
+                f.write(pub_pem)
+            print(f"Exported public key PEM: {args.public_key_pem}")
+        if args.public_key_der:
+            pub_der = pub_key.public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+            os.makedirs(os.path.dirname(os.path.abspath(args.public_key_der)), exist_ok=True)
+            with open(args.public_key_der, "wb") as f:
+                f.write(pub_der)
+            print(f"Exported public key SPKI DER: {args.public_key_der}")
 
 
 if __name__ == "__main__":

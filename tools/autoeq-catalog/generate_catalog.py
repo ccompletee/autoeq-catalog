@@ -167,7 +167,8 @@ def process_eq_file(
 def scan_results_dir(
     results_dir: str,
     export_profiles_dir: Optional[str] = None,
-    index_file: Optional[str] = None
+    index_file: Optional[str] = None,
+    default_license: str = "MIT"
 ) -> List[Dict[str, Any]]:
     entries = []
     seen_ids = set()
@@ -268,7 +269,7 @@ def scan_results_dir(
                     "author": author,
                     "target": target,
                     "rig": rig,
-                    "license": "MIT",
+                    "license": default_license,
                     "files": files,
                 })
 
@@ -283,7 +284,8 @@ def generate_manifest(
     catalog_version: Optional[int] = None,
     generated_at: Optional[str] = None,
     export_profiles_dir: Optional[str] = None,
-    index_file: Optional[str] = None
+    index_file: Optional[str] = None,
+    default_license: str = "MIT"
 ) -> Dict[str, Any]:
     resolved_sha, commit_ts, commit_iso = resolve_commit_metadata(results_dir, source_commit)
     final_source_commit = source_commit if source_commit and len(source_commit) == 40 else resolved_sha
@@ -294,7 +296,12 @@ def generate_manifest(
     if generated_at is None:
         generated_at = commit_iso if commit_iso is not None else datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    entries = scan_results_dir(results_dir, export_profiles_dir=export_profiles_dir, index_file=index_file)
+    entries = scan_results_dir(
+        results_dir,
+        export_profiles_dir=export_profiles_dir,
+        index_file=index_file,
+        default_license=default_license
+    )
 
     if len(entries) > MAX_CATALOG_ENTRIES:
         raise ValueError(f"Generated {len(entries)} entries, exceeding maximum limit {MAX_CATALOG_ENTRIES}")
@@ -317,6 +324,7 @@ def main():
     parser.add_argument("--catalog-version", type=int, help="Catalog revision version (default: commit timestamp or unix epoch)")
     parser.add_argument("--generated-at", help="Explicit ISO-8601 generated timestamp (default: commit date or UTC now)")
     parser.add_argument("--index-file", help="Path to AutoEq INDEX.md to parse rig and metadata")
+    parser.add_argument("--license", default="MIT", help="License string for generated catalog entries (default: MIT)")
     parser.add_argument("--export-profiles-dir", help="Directory to export sanitized profile files for hosting")
     parser.add_argument("--pretty", action="store_true", help="Format JSON with 2 spaces indentation")
 
@@ -328,7 +336,8 @@ def main():
         catalog_version=args.catalog_version,
         generated_at=args.generated_at,
         export_profiles_dir=args.export_profiles_dir,
-        index_file=args.index_file
+        index_file=args.index_file,
+        default_license=args.license
     )
 
     indent = 2 if args.pretty else None

@@ -32,10 +32,11 @@ Upstream jaakkopasanen/AutoEq
 
 ## 2. Directory Layout & Tools
 
-- `generate_catalog.py`: Scans `results/`, normalizes names, extracts `FixedBandEQ.txt` & `ParametricEQ.txt`, derives `remote:` IDs, and outputs deterministic JSON.
-- `sign_catalog.py`: Signs the manifest using ECDSA P-256 (`SHA256withECDSA`), outputting the ASN.1 DER signature and optional SPKI public key.
+- `generate_catalog.py`: Scans `results/`, normalizes names, extracts `FixedBandEQ.txt` & `ParametricEQ.txt`, derives `remote:` IDs, applies configurable `--license` metadata, and outputs deterministic JSON.
+- `sign_catalog.py`: Signs the manifest using ECDSA P-256 (`SHA256withECDSA`), outputting the ASN.1 DER signature and optional SPKI public key. Fails safely if private key is missing and `--generate-keys` is omitted.
+- `test_generate_catalog.py`: Unit test suite verifying catalog generator determinism, license assignment, and key management safety.
 - `keygen.sh`: Shell helper using OpenSSL to generate `private_key.pem`, `public_key.pem`, and `public_key.der`.
-- `.gitignore`: Prevents accidental commits of private keys or build outputs.
+- `.gitignore`: Prevents accidental commits of private keys, key directories, or build outputs.
 
 ---
 
