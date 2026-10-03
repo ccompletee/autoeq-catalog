@@ -1,0 +1,124 @@
+name: AutoEQ Remote Catalog Build & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      autoeq_ref:
+        description: 'AutoEq git ref / commit SHA to pin (default: master)'
+        required: false
+        default: 'master'
+      catalog_version:
+        description: 'Explicit catalog revision timestamp (default: current epoch)'
+        required: false
+        default: ''
+  schedule:
+    # Run once a week at 03:00 UTC on Sunday
+    - cron: '0 3 * * 0'
+
+jobs:
+  build-catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install cryptography
+
+      - name: Sparse Checkout Upstream AutoEq
+        run: |
+          AUTOEQ_REF="${{ github.event.inputs.autoeq_ref || 'master' }}"
+          echo "Cloning jaakkopasanen/AutoEq..."
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/jaakkopasanen/AutoEq.git upstream-autoeq
+          cd upstream-autoeq
+          git sparse-checkout set results INDEX.md
+          if [ "$AUTOEQ_REF" != "master" ] && [ "$AUTOEQ_REF" != "main" ]; then
+            git fetch --depth 1 origin "$AUTOEQ_REF" || true
+            git checkout "$AUTOEQ_REF"
+          fi
+          AUTOEQ_COMMIT=$(git rev-parse HEAD)
+          echo "AUTOEQ_COMMIT=$AUTOEQ_COMMIT" >> $GITHUB_ENV
+          cd ..
+
+      - name: Generate Catalog Manifest
+        run: |
+          VERSION_ARG=""
+          if [ -n "${{ github.event.inputs.catalog_version }}" ]; then
+            VERSION_ARG="--catalog-version ${{ github.event.inputs.catalog_version }}"
+          fi
+
+          python3 tools/autoeq-catalog/generate_catalog.py \
+            --results-dir upstream-autoeq/results \
+            --output dist/catalog.v1.json \
+            --export-profiles-dir dist \
+            --source-commit "$AUTOEQ_COMMIT" \
+            $VERSION_ARG \
+            --pretty
+
+      - name: Sign Catalog (if secret configured)
+        if: ${{ secrets.AUTOEQ_SIGNING_KEY != '' }}
+        env:
+          AUTOEQ_SIGNING_KEY: ${{ secrets.AUTOEQ_SIGNING_KEY }}
+        run: |
+          echo "$AUTOEQ_SIGNING_KEY" > signing_key.pem
+          chmod 600 signing_key.pem
+
+          python3 tools/autoeq-catalog/sign_catalog.py \
+            --manifest dist/catalog.v1.json \
+            --private-key signing_key.pem \
+            --signature dist/catalog.v1.json.sig \
+            --public-key-der dist/public_key.der
+
+          rm -f signing_key.pem
+
+          python3 tools/autoeq-catalog/sign_catalog.py \
+            --manifest dist/catalog.v1.json \
+            --signature dist/catalog.v1.json.sig \
+            --public-key-der dist/public_key.der \
+            --verify-only
+
+      - name: Upload Catalog Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoeq-catalog-v1
+          path: |
+            dist/catalog.v1.json
+            dist/catalog.v1.json.sig
+            dist/public_key.der
+            dist/profiles
+          retention-days: 30
+
+  deploy-pages:
+    needs: build-catalog
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Catalog Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: autoeq-catalog-v1
+          path: dist
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'dist'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
