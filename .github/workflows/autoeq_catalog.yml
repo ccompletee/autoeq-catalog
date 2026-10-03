@@ -70,9 +70,9 @@ jobs:
 
       - name: Sign Catalog (if secret configured)
         id: sign
-        if: ${{ secrets.AUTOEQ_SIGNING_KEY != '' }}
         env:
           AUTOEQ_SIGNING_KEY: ${{ secrets.AUTOEQ_SIGNING_KEY }}
+        if: ${{ env.AUTOEQ_SIGNING_KEY != '' }}
         run: |
           echo "$AUTOEQ_SIGNING_KEY" > signing_key.pem
           chmod 600 signing_key.pem
