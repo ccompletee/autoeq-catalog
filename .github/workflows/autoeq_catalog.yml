@@ -42,7 +42,7 @@ jobs:
         run: |
           AUTOEQ_REF="${{ github.event.inputs.autoeq_ref || 'master' }}"
           echo "Cloning jaakkopasanen/AutoEq..."
-          git clone --depth 1 --filter=blob:none --sparse https://github.com/jaakkopasanen/AutoEq.git upstream-autoeq
+          git clone --depth 1 --sparse https://github.com/jaakkopasanen/AutoEq.git upstream-autoeq
           cd upstream-autoeq
           git sparse-checkout set results INDEX.md
           if [ "$AUTOEQ_REF" != "master" ] && [ "$AUTOEQ_REF" != "main" ]; then
