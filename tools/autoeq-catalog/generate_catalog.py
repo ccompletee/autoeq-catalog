@@ -22,6 +22,7 @@ MAX_MANIFEST_SIZE_BYTES = 8 * 1024 * 1024  # 8 MB
 MAX_CATALOG_ENTRIES = 20_000
 MAX_NAME_LENGTH = 128
 MAX_FILE_SIZE_BYTES = 100 * 1024  # 100 KB
+MAX_CONVOLUTION_WAV_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
 ALLOWED_PATH_REGEX = re.compile(r"^[a-zA-Z0-9_\-./]+$")
 BIDI_CHARS = {0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069}
 
@@ -139,13 +140,14 @@ def extract_rig(
 def process_eq_file(
     file_path: str,
     kind: str,
-    relative_path: str
+    relative_path: str,
+    max_size_bytes: int = MAX_FILE_SIZE_BYTES
 ) -> Optional[Dict[str, Any]]:
     if not os.path.isfile(file_path):
         return None
 
     size = os.path.getsize(file_path)
-    if size <= 0 or size > MAX_FILE_SIZE_BYTES:
+    if size <= 0 or size > max_size_bytes:
         print(f"Skipping {file_path}: invalid size ({size} bytes)", file=sys.stderr)
         return None
 
@@ -223,15 +225,18 @@ def scan_results_dir(
 
                 files = []
 
-                # Find EQ files in model_dir matching *FixedBandEQ.txt or *ParametricEQ.txt
+                # Find EQ files in model_dir matching *FixedBandEQ.txt, *ParametricEQ.txt, or *minimum phase 48000Hz.wav
                 fixed_band_path = None
                 parametric_path = None
+                wav_path = None
                 if os.path.isdir(model_dir):
                     for fname in os.listdir(model_dir):
                         if fname.endswith("FixedBandEQ.txt"):
                             fixed_band_path = os.path.join(model_dir, fname)
                         elif fname.endswith("ParametricEQ.txt"):
                             parametric_path = os.path.join(model_dir, fname)
+                        elif fname.endswith("minimum phase 48000Hz.wav"):
+                            wav_path = os.path.join(model_dir, fname)
 
                 # 1. FixedBandEQ.txt
                 if fixed_band_path and os.path.exists(fixed_band_path):
@@ -255,6 +260,23 @@ def scan_results_dir(
                             dest = os.path.join(export_profiles_dir, rel_path)
                             os.makedirs(os.path.dirname(dest), exist_ok=True)
                             with open(parametric_path, "rb") as src_f, open(dest, "wb") as dst_f:
+                                dst_f.write(src_f.read())
+
+                # 3. Convolution WAV (48 kHz)
+                if wav_path and os.path.exists(wav_path):
+                    rel_path = f"{base_profile_path}/ir_48k.wav"
+                    file_info = process_eq_file(
+                        wav_path,
+                        "CONVOLUTION_WAV",
+                        rel_path,
+                        max_size_bytes=MAX_CONVOLUTION_WAV_SIZE_BYTES
+                    )
+                    if file_info:
+                        files.append(file_info)
+                        if export_profiles_dir:
+                            dest = os.path.join(export_profiles_dir, rel_path)
+                            os.makedirs(os.path.dirname(dest), exist_ok=True)
+                            with open(wav_path, "rb") as src_f, open(dest, "wb") as dst_f:
                                 dst_f.write(src_f.read())
 
                 if not files:
